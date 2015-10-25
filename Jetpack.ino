@@ -1,6 +1,6 @@
 // Jetpack for devhouse Spindle.
-// https://github.com/HermanKopinga/Jetpack
-// By: herman@kopinga.nl
+// https://github.com/WeAreSpindle/Jetpacks
+// By: herman@kopinga.nl, bob.voorneveld@wearespindle.com
 // BSD license
 
 // Stands of the shoulders of:
@@ -35,7 +35,6 @@ char replybuffer[255];
 Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
 uint8_t readline(char *buff, uint8_t maxbuff, uint16_t timeout = 0);
 uint16_t battpercent = 0;
-Location current_location = Location();
 
 /**********
  BLUETOOTH
@@ -51,7 +50,7 @@ Adafruit_BLE_UART BTLEserial = Adafruit_BLE_UART(ADAFRUITBLE_REQ, ADAFRUITBLE_RD
 aci_evt_opcode_t laststatus = ACI_EVT_DISCONNECTED;
 
 /**********
- GPS 
+ GPS
 ***********/
 // You should make the following connections with the Due and GPS module:
 // GPS power pin to Arduino Due 3.3V output.
@@ -64,7 +63,7 @@ aci_evt_opcode_t laststatus = ACI_EVT_DISCONNECTED;
 Adafruit_GPS GPS(&GPSSerial);
 
 // Set GPSECHO to 'false' to turn off echoing the GPS data to the Serial console
-// Set to 'true' if you want to debug and listen to the raw GPS sentences. 
+// Set to 'true' if you want to debug and listen to the raw GPS sentences.
 #define GPSECHO  false
 
 /**********
@@ -76,7 +75,7 @@ boolean usingInterrupt = false;
 void useInterrupt(boolean); // Func prototype keeps Arduino 0023 happy
 
 // Display pins
-// You can use any (4 or) 5 pins 
+// You can use any (4 or) 5 pins
 #define sclk 20
 #define mosi 21
 #define cs   10
@@ -90,40 +89,18 @@ void useInterrupt(boolean); // Func prototype keeps Arduino 0023 happy
 #define	GREEN           0x07E0
 #define CYAN            0x07FF
 #define MAGENTA         0xF81F
-#define YELLOW          0xFFE0  
+#define YELLOW          0xFFE0
 #define WHITE           0xFFFF
 #define GREY            0x38E7
 
 // Option 1: use any pins but a little slower
-//Adafruit_SSD1331 display = Adafruit_SSD1331(cs, dc, mosi, sclk, rst);  
+//Adafruit_SSD1331 display = Adafruit_SSD1331(cs, dc, mosi, sclk, rst);
 
-// Option 2: must use the hardware SPI pins 
-// (for UNO thats sclk = 13 and sid = 11) and pin 10 must be 
+// Option 2: must use the hardware SPI pins
+// (for UNO thats sclk = 13 and sid = 11) and pin 10 must be
 // an output. This is much faster - also required if you want
 // to use the microSD card (see the image drawing example)
 Adafruit_SSD1331 display = Adafruit_SSD1331(cs, dc, rst);
-
-/************
- 9DOF & AHRS
-*************/
-float p = 3.1415926;
-sensors_vec_t orientation; 
-
-// Create LSM9DS0 board instance.
-Adafruit_LSM9DS0 lsm(1000);  // Use I2C, ID #1000
-
-// Create simple AHRS algorithm using the LSM9DS0 instance's accelerometer and magnetometer.
-Adafruit_Simple_AHRS ahrs(&lsm.getAccel(), &lsm.getMag());
-
-// Function to configure the sensors on the LSM9DS0 board.
-// You don't need to change anything here, but have the option to select different
-// range and gain values.
-void configureLSM9DS0(void)
-{
-  lsm.setupAccel(lsm.LSM9DS0_ACCELRANGE_2G);    // 1.) Set the accelerometer range
-  lsm.setupMag(lsm.LSM9DS0_MAGGAIN_2GAUSS);     // 2.) Set the magnetometer sensitivity
-  lsm.setupGyro(lsm.LSM9DS0_GYROSCALE_245DPS);  // 3.) Setup the gyroscope
-}
 
 /*******************
 ATTINY i2c leddriver
@@ -132,19 +109,17 @@ const int ledAddress = 0x26;
 
 /*************
  Housekeeping
-*************/ 
+*************/
 #define STATUSLED 2
 #define HEADLIGHT 6
 #define BUTTONPIN0 22
 #define BUTTONPIN1 23
 #define LIGHTSENSOR A0
 uint32_t timer = millis();
-uint32_t lastMillis9dof = 0;
-uint32_t lastMillisFona = 0;
 Bounce button0 = Bounce(BUTTONPIN0, 10);
 Bounce button1 = Bounce(BUTTONPIN1, 10);
 int largebatt = 0;
-unsigned long currentMillis = millis();
+uint32_t currentMillis = 0;
 unsigned long blinkBreak = 1000;
 unsigned long previousBlink = 0;
 unsigned long headlightBreak = 50;
@@ -152,105 +127,72 @@ unsigned long previousHeadlight = 0;
 
 /*************
     SETUP
-*************/ 
+*************/
 void setup(void) {
   // This boudrate is ignored by Teensy, always runs at full USB speed.
-  Serial.begin(115200);  
+  Serial.begin(115200);
   BTLEserial.begin();  // ToDo: needs to initialize before display. Fix: learn SSD1331 driver proper transactions.
 
   // Initialize display first
   display.begin();
-  display.fillScreen(BLACK);  
+  display.fillScreen(BLACK);
   display.setTextColor(YELLOW);
   display.print("Spindle");
-  display.setTextColor(WHITE, BLACK);  
+  display.setTextColor(WHITE, BLACK);
   display.print(" Jetpack\n\n");
-  
-  display.print("Serial...\nBluetooth...\n");
-  
+
+  display.print("Serial... OK\n");
+  display.print("Bluetooth... OK\n");
+
   Serial.println(F("Initializing FONA.... (May take 3 seconds)"));
 
-  display.print("Fona");
+  display.print("Fona...");
 
   Serial1.begin(4800); // FONA if you're using hardware serial
 
   // See if the FONA is responding
-  if (! fona.begin(Serial1)) {           // can also try fona.begin(Serial1) 
+  if (! fona.begin(Serial1)) {           // can also try fona.begin(Serial1)
     Serial.println(F("Couldn't find FONA"));
     while (1);
   }
   Serial.println(F("FONA is OK"));
 
-  display.print("...\nGPS");
-
-  // 9600 NMEA is the default baud rate for Adafruit MTK GPS's- some use 4800
-  GPS.begin(9600);
-  GPSSerial.begin(9600);
-
-  // uncomment this line to turn on RMC (recommended minimum) and GGA (fix data) including altitude
-  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);  
-  // uncomment this line to turn on only the "minimum recommended" data
-  //GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
-  // For parsing data, we don't suggest using anything but either RMC only or RMC+GGA since
-  // the parser doesn't care about other sentences at this time
+  display.print(" OK\n");
+  display.print("GPS... ");
+  gpsSetup();
+  display.print(" OK\n");
   
-  // Set the update rate
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1 Hz update rate
-  // For the parsing code to work nicely and have time to sort thru the data, and
-  // print it out we don't suggest using anything higher than 1 Hz
-
-  // Request updates on antenna status, comment out to keep quiet
-  GPS.sendCommand(PGCMD_ANTENNA);
-
-  // the nice thing about this code is you can have a timer0 interrupt go off
-  // every 1 millisecond, and read data from the GPS for you. that makes the
-  // loop code a heck of a lot easier!
-
-#ifdef __arm__
-  usingInterrupt = false;  //NOTE - we don't want to use interrupts on the Due
-#else
-  useInterrupt(true);
-#endif
-
-  delay(1000);
-  // Ask for firmware version
-  GPSSerial.println(PMTK_Q_RELEASE);
-
-  display.print("...\n9DOF");
-  
-  // Initialise the LSM9DS0 board.
-  if(!lsm.begin())
-  {
-    // There was a problem detecting the LSM9DS0 ... check your connections
-    Serial.print(F("Ooops, no LSM9DS0 detected ... Check your wiring or I2C ADDR!"));
-    while(1);
-  }
-  
-  // Setup the sensor gain and integration time.
-  configureLSM9DS0();    
-  display.print("...");  
+  display.print("9DOF... ");
+  nineDOFSetup();
+  display.print("OK");
 
   // Housekeeping
   pinMode(BUTTONPIN0, INPUT_PULLUP);
-  pinMode(BUTTONPIN1, INPUT_PULLUP);  
+  pinMode(BUTTONPIN1, INPUT_PULLUP);
   pinMode(LIGHTSENSOR, INPUT);
   pinMode(STATUSLED, OUTPUT);
   pinMode(HEADLIGHT, OUTPUT);
-}
 
+  delay(2000);
+  clearMiddle();
+  display.setCursor(0,18);
+  display.print("Setup OK");
+  delay(2000);
+  clearMiddle();
+}
 
 void loop() {
   // Millis is used multiple times in the loop, save it locally :)
   currentMillis = millis();
-  
+
   // Buttons!
   button0.update();
   button1.update();
-  
+
   if (button0.fallingEdge()) {
     clearMiddle();
     largebatt = !largebatt;
-    disMinute();
+    updateDisplay();
   }
   if (button1.fallingEdge()) {
     Wire.beginTransmission(ledAddress);
@@ -262,7 +204,7 @@ void loop() {
     Wire.write(0x0);
     Wire.endTransmission();
   }
-   
+
   // Blink internal LED: working.
   if ((unsigned long)(currentMillis - previousBlink) >= blinkBreak) {
     digitalWrite(STATUSLED, !digitalRead(STATUSLED));
@@ -271,67 +213,34 @@ void loop() {
 
   // Headlight code.
   if ((unsigned long)(currentMillis - previousHeadlight) >= headlightBreak) {
-    analogWrite(HEADLIGHT,map(analogRead(LIGHTSENSOR), 0,500,128,0));
+    analogWrite(HEADLIGHT, map(analogRead(LIGHTSENSOR), 0, 500, 128, 0));
     previousHeadlight = currentMillis;
   }
-  
-/**********
-9DOF & AHRS
-***********/  
-  // Use the simple AHRS function to get the current orientation.
-  if (currentMillis - lastMillis9dof > 1000 && ahrs.getOrientation(&orientation)) {
-    disSecond();
-  }
-  
-/**********
- GPS
-***********/
-  
-  // in case you are not using the interrupt above, you'll
-  // need to 'hand query' the GPS, not suggested :(
-  if (! usingInterrupt) {
-    // read data from the GPS in the 'main loop'
-    char c = GPS.read();
-    // if you want to debug, this is a good time to do it!
-    if (GPSECHO)
-      if (c) Serial.print(c);
-  }
-  
-  // if a sentence is received, we can check the checksum, parse it...
-  if (GPS.newNMEAreceived()) {
-    // a tricky thing here is if we print the NMEA sentence, or data
-    // we end up not listening and catching other sentences! 
-    // so be very wary if using OUTPUT_ALLDATA and trytng to print out data
-    //Serial.println(GPS.lastNMEA());   // this also sets the newNMEAreceived() flag to false
-  
-    if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
-      return;  // we can fail to parse a sentence in which case we should just wait for another
-  }
+
+  // loop trough inputs
+  nineDOFLoop();
+  gpsLoop();
 
   // if millis() or timer wraps around, we'll just reset it
   if (timer > currentMillis)  timer = currentMillis;
 
-  // approximately every 10 seconds or so, print out the current stats
-  if (currentMillis - timer > 10000) { 
-    dis10S();
-  }  
-
-/**********
- GSM/FONA
-***********/  
-  // Every minute update battery percentage.
-  if (currentMillis - lastMillisFona > 10000) {
-    disMinute();
+  // approximately every 10 seconds or so, print out the current stats and sent the location
+  if (currentMillis - timer > 10000) {
+    updateDisplay();
+    displayGPSDebugInfo();
+    sendLocation();
+    // this all took some time, so set currentMillis again
+    currentMillis = millis();
   }
 
   if (Serial.available()) {
     doFona();
   }
 
-/**********
- BLUETOOTH
-***********/
- // Tell the nRF8001 to do whatever it should be working on.
+  /**********
+   BLUETOOTH
+  ***********/
+  // Tell the nRF8001 to do whatever it should be working on.
   BTLEserial.pollACI();
 
   // Ask what is our current status
@@ -340,17 +249,17 @@ void loop() {
   if (status != laststatus) {
     // print it out!
     if (status == ACI_EVT_DEVICE_STARTED) {
-        Serial.println(F("* Advertising started"));
-        delay(100);                                    // ToDo: SPI bug is here.
-        display.drawChar(91,8,'b',WHITE,BLACK,1);
+      Serial.println(F("* Advertising started"));
+      delay(100);                                    // ToDo: SPI bug is here.
+      display.drawChar(91, 8, 'b', WHITE, BLACK, 1);
     }
     if (status == ACI_EVT_CONNECTED) {
-        Serial.println(F("* Connected!"));
-        display.drawChar(91,8,'B',BLUE,BLACK,1);        
+      Serial.println(F("* Connected!"));
+      display.drawChar(91, 8, 'B', BLUE, BLACK, 1);
     }
     if (status == ACI_EVT_DISCONNECTED) {
-        Serial.println(F("* Disconnected or advertising timed out"));
-        display.drawChar(91,8,'b',WHITE,BLACK,1);        
+      Serial.println(F("* Disconnected or advertising timed out"));
+      display.drawChar(91, 8, 'b', WHITE, BLACK, 1);
     }
     // OK set the last status change to this one
     laststatus = status;
@@ -388,18 +297,6 @@ void loop() {
 }
 
 #ifdef __AVR__ // ToDo: Reminder to fix this properly.
-// Interrupt is called once a millisecond, looks for any new GPS data, and stores it
-SIGNAL(TIMER0_COMPA_vect) {
-  char c = GPS.read();
-  // if you want to debug, this is a good time to do it!
-#ifdef UDR0
-  if (GPSECHO)
-    if (c) UDR0 = c;  
-    // writing direct to UDR0 is much much faster than Serial.print 
-    // but only one character can be written at a time. 
-#endif
-}
-
 void useInterrupt(boolean v) {
   if (v) {
     // Timer0 is already used for millis() - we'll just interrupt somewhere
@@ -414,3 +311,4 @@ void useInterrupt(boolean v) {
   }
 }
 #endif //#ifdef__AVR__
+
